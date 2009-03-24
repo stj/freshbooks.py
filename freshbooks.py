@@ -1,14 +1,14 @@
 """
 freshbooks.py - Python interface to the FreshBooks API (http://developers.freshbooks.com)
 
-Library Maintainer:  
+Library Maintainer:
     Matt Culbreth
     mattculbreth@gmail.com
     http://mattculbreth.com
 
 #####################################################################
 
-This work is distributed under an MIT License: 
+This work is distributed under an MIT License:
 http://www.opensource.org/licenses/mit-license.php
 
 The MIT License
@@ -36,18 +36,18 @@ THE SOFTWARE.
 #####################################################################
 
 Hello, this is an open source Python library that serves as an interface to FreshBooks.
-The code is heavily based on the existing Ruby implementation 
+The code is heavily based on the existing Ruby implementation
 by Ben Vinegar of the same interface:
     http://freshbooks.rubyforge.org/
-    
+
 USAGE:
 
     import freshbooks
-    
+
     freshbooks.setup('YOU.freshbooks.com', '<YOUR AUTH TOKEN>')
     clients = freshbooks.Client.list()
     client_1 = freshbooks.Client.get(<client_id>)
-    
+
 """
 
 import sys, os, datetime
@@ -72,7 +72,7 @@ def setup(url, token, user_agent_name=None, headers={}):
     This funtion sets the high level variables for use in the interface.
     '''
     global account_url, account_name, auth_token, user_agent, request_headers
-    
+
     account_url = url
     if url.find('//') == -1:
         account_name = url[:(url.find('freshbooks.com') - 1)]
@@ -85,17 +85,17 @@ def setup(url, token, user_agent_name=None, headers={}):
         if not user_agent:
             user_agent = 'Python:%s' % account_name
         request_headers['User-Agent'] = user_agent
-    
-#  these three classes are for typed exceptions  
+
+#  these three classes are for typed exceptions
 class InternalError(Exception):
     pass
-    
+
 class AuthenticationError(Exception):
     pass
-    
+
 class UnknownSystemError(Exception):
     pass
-    
+
 class InvalidParameterError(Exception):
     pass
 
@@ -105,24 +105,24 @@ def call_api(method, elems = []):
     This function calls into the FreshBooks API and returns the Response
     '''
     global last_response
-    
+
     # make the request, which is an XML document
     doc = xml_lib.Document()
     request = doc.createElement('request')
     request.setAttribute('method', method)
     for key, value in elems.items():
         if isinstance(value, BaseObject):
-            request.appendChild(value.to_xml())
+            request.appendChild(value.to_xml(doc))
         else:
             e = doc.createElement(key)
             e.appendChild(doc.createTextNode(str(value)))
             request.appendChild(e)
     doc.appendChild(request)
-            
+
     # send it
     result = post(doc.toxml('utf-8'))
     last_response = Response(result)
-    
+
     # check for failure and throw an exception
     if not last_response.success:
         msg = last_response.error_message
@@ -138,14 +138,14 @@ def call_api(method, elems = []):
             raise InvalidParameterError(msg)
         else:
             raise Exception(msg)
-            
+
     return last_response
-    
+
 def post(body):
     '''
     This function actually communicates with the FreshBooks API
     '''
-    
+
     # setup HTTP basic authentication
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     url = ""
@@ -155,8 +155,8 @@ def post(body):
     password_mgr.add_password(None, url, auth_token, '')
     handler = urllib2.HTTPBasicAuthHandler(password_mgr)
     opener = urllib2.build_opener(handler)
-    urllib2.install_opener(opener)    
-    
+    urllib2.install_opener(opener)
+
     # make the request and return the response body
     request = urllib2.Request(url, body, request_headers)
     response = urllib2.urlopen(request)
@@ -172,7 +172,7 @@ class Response(object):
         The constructor, taking in the xml as the source
         '''
         self._doc = xml_lib.parseString(xml_raw)
-        
+
     def __repr__(self):
         '''
         Print the Response and show the XML document
@@ -181,29 +181,29 @@ class Response(object):
             (self.success,self.error_message)
         s += "\nResponse Document: \n%s" % self.doc.toxml()
         return s
-      
-    @property  
+
+    @property
     def doc(self):
         '''
         Return the document
         '''
         return self._doc
-    
+
     @property
     def elements(self):
         '''
         Return the doc's elements
         '''
         return self._doc.childNodes
-       
-    @property 
+
+    @property
     def success(self):
         '''
         return True if this is a successful response from the API
         '''
         return self._doc.firstChild.attributes['status'].firstChild.nodeValue == 'ok'
-    
-    @property    
+
+    @property
     def error_message(self):
         '''
         returns the error message associated with this API response
@@ -213,23 +213,23 @@ class Response(object):
             return error[0].childNodes[0].nodeValue
         else:
             return None
-            
+
 class BaseObject(object):
     '''
     This serves as the base object for all FreshBooks objects.
     '''
-    
+
     # this is used to provide typing help for certain type, ie
     # client.id is an int
     TYPE_MAPPINGS = {}
-    
+
     # anonymous functions to do the conversions on type
     MAPPING_FUNCTIONS = {
         'int' : lambda val: int(val),
         'float' : lambda val: float(val),
         'bool' : lambda val: bool(int(val)) if val in ('0', '1') else val,
         'datetime' : lambda val: \
-            datetime.datetime.strptime(val, 
+            datetime.datetime.strptime(val,
             '%Y-%m-%d %H:%M:%S') if (val != '0000-00-00 00:00:00' and len(val) == 19) else datetime.datetime.strptime(val, '%Y-%m-%d') if len(val) == 10 else val
     }
 
@@ -240,8 +240,8 @@ class BaseObject(object):
         object from the XML.
         '''
         obj = cls()
-        
-        # basically just go through the XML creating attributes on the 
+
+        # basically just go through the XML creating attributes on the
         # object.
         for elem in [node for node in element.childNodes if node.nodeType == node.ELEMENT_NODE]:
             val = None
@@ -255,17 +255,17 @@ class BaseObject(object):
                         c = eval(item.nodeName.capitalize())
                         if c:
                             val.append(c._new_from_xml(item))
-                        
-                # if there is typing information supplied by 
+
+                # if there is typing information supplied by
                 # the child class then use that
                 elif cls.TYPE_MAPPINGS.has_key(elem.nodeName):
                     val = \
                         cls.MAPPING_FUNCTIONS[\
                             cls.TYPE_MAPPINGS[elem.nodeName]](val)
             setattr(obj, elem.nodeName, val)
-            
+
         return obj
-        
+
     @classmethod
     def get(cls, object_id, element_name = None):
         '''
@@ -279,10 +279,10 @@ class BaseObject(object):
                 return cls._new_from_xml(items[0])
 
         return None
-        
+
     @classmethod
     def list(cls, options = {}, element_name = None, get_all=False):
-        '''  
+        '''
         Get a summary list of this object.
         If get_all is True then the paging will be checked to get all of the items.
         '''
@@ -300,16 +300,16 @@ class BaseObject(object):
                 if len(new_objects) < options['per_page']:
                     break
                 options['page'] += 1
-            result = [cls._new_from_xml(elem) for elem in objects] 
-        else:        
+            result = [cls._new_from_xml(elem) for elem in objects]
+        else:
             resp = call_api('%s.list' % cls.object_name, options)
             if (resp.success):
                 result = [cls._new_from_xml(elem) for elem in \
                     resp.doc.getElementsByTagName(element_name or cls.object_name)]
 
         return result
-        
-        
+
+
     def to_xml(self, doc, element_name=None):
         '''
         Create an XML representation of the object for use
@@ -319,35 +319,38 @@ class BaseObject(object):
         element_name = element_name or \
             self.object_name.lower()
         root = doc.createElement(element_name)
-        
+
         # Add each member to the root element
         for key, value in self.__dict__.items():
             if isinstance(value, list):
                 array = doc.createElement(key)
                 for item in value:
-                    item_name = 'line' if key == 'lines' else key[:-1]
-                    array_item = doc.createElement(item_name)
-                    array_item.appendChild(doc.createTextNode(str(item)))
-                root.append(array)
+                    if key == 'lines':
+                        line = item.to_xml(doc, 'line')
+                    else:
+                        line = doc.createElement(key[:-1])
+                        line.appendChild(doc.createTextNode(str(item)))
+                    array.appendChild(line)
+                root.appendChild(array)
             elif value:
                 elem = doc.createElement(key)
                 elem.appendChild(doc.createTextNode(str(value)))
                 root.appendChild(elem)
-        
-        return root            
-    
- 
+
+        return root
+
+
 #-----------------------------------------------#
 # Client
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Client(BaseObject):
     '''
     The Client object
     '''
-    
+
     TYPE_MAPPINGS = {'client_id' : 'int'}
     object_name = 'client'
-    
+
     def __init__(self):
         '''
         The constructor is where we initially create the
@@ -356,11 +359,11 @@ class Client(BaseObject):
         # self.object_name = 'client'
         for att in ('client_id', 'first_name', 'last_name', 'organization','email', 'username', 'password', 'work_phone', 'home_phone', 'mobile', 'fax', 'notes', 'p_street1', 'p_street2', 'p_city', 'p_state', 'p_country', 'p_code','s_street1', 's_street2', 's_city', 's_state', 's_country', 's_code', 'url'):
             setattr(self, att, None)
-        
-  
+
+
 #-----------------------------------------------#
 # Invoice
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Invoice(BaseObject):
     '''
     The Invoice object
@@ -369,7 +372,7 @@ class Invoice(BaseObject):
     object_name = 'invoice'
     TYPE_MAPPINGS = {'invoice_id' : 'int', 'client_id' : 'int',
         'po_number' : 'int', 'discount' : 'float', 'amount' : 'float',
-        'date' : 'datetime', 'amount_outstanding' : 'float', 
+        'date' : 'datetime', 'amount_outstanding' : 'float',
         'paid' : 'float'}
 
     def __init__(self):
@@ -378,17 +381,16 @@ class Invoice(BaseObject):
         attributes for this class
         '''
         for att in ('invoice_id', 'client_id', 'number', 'date', 'po_number',
-      'terms', 'first_name', 'last_name', 'organization', 'p_street1', 'p_street2', 
-      'p_city','p_state', 'p_country', 'p_code', 'amount', 'amount_outstanding', 'paid', 
+      'terms', 'first_name', 'last_name', 'organization', 'p_street1', 'p_street2',
+      'p_city','p_state', 'p_country', 'p_code', 'amount', 'amount_outstanding', 'paid',
       'lines', 'discount', 'status', 'notes', 'url'):
             setattr(self, att, None)
         self.lines = []
-        self.links = []
 
-        
+
 #-----------------------------------------------#
 # Line--really just a part of Invoice
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Line(BaseObject):
     TYPE_MAPPINGS = {'unit_cost' : 'float', 'quantity' : 'float',
         'tax1_percent' : 'float', 'tax2_percent' : 'float', 'amount' : 'float'}
@@ -401,7 +403,7 @@ class Line(BaseObject):
         for att in ('name', 'description', 'unit_cost', 'quantity', 'tax1_name',
         'tax2_name', 'tax1_percent', 'tax2_percent', 'amount'):
             setattr(self, att, None)
-    
+
     @classmethod
     def get(cls, object_id, element_name = None):
         '''
@@ -419,7 +421,7 @@ class Line(BaseObject):
 
 #-----------------------------------------------#
 # Item
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Item(BaseObject):
     '''
     The Item object
@@ -441,7 +443,7 @@ class Item(BaseObject):
 
 #-----------------------------------------------#
 # Payment
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Payment(BaseObject):
     '''
     The Payment object
@@ -462,7 +464,7 @@ class Payment(BaseObject):
 
 #-----------------------------------------------#
 # Recurring
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Recurring(BaseObject):
     '''
     The Recurring object
@@ -483,10 +485,10 @@ class Recurring(BaseObject):
             setattr(self, att, None)
         self.lines = []
 
-    
+
 #-----------------------------------------------#
 # Project
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Project(BaseObject):
     '''
     The Project object
@@ -508,7 +510,7 @@ class Project(BaseObject):
 
 #-----------------------------------------------#
 # Task
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Task(BaseObject):
     '''
     The Task object
@@ -528,7 +530,7 @@ class Task(BaseObject):
 
 #-----------------------------------------------#
 # TimeEntry
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class TimeEntry(BaseObject):
     '''
     The TimeEntry object
@@ -546,10 +548,10 @@ class TimeEntry(BaseObject):
             'notes', 'date'):
             setattr(self, att, None)
 
-        
+
 #-----------------------------------------------#
 # Estimate
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Estimate(BaseObject):
     '''
     The Estimate object
@@ -572,7 +574,7 @@ class Estimate(BaseObject):
 
 #-----------------------------------------------#
 # Expense
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Expense(BaseObject):
     '''
     The Expense object
@@ -593,7 +595,7 @@ class Expense(BaseObject):
 
 #-----------------------------------------------#
 # Category
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Category(BaseObject):
     '''
     The Category object
@@ -613,7 +615,7 @@ class Category(BaseObject):
 
 #-----------------------------------------------#
 # Staff
-#-----------------------------------------------#      
+#-----------------------------------------------#
 class Staff(BaseObject):
     '''
     The Staff object
@@ -630,13 +632,13 @@ class Staff(BaseObject):
         '''
         for att in ('staff_id', 'username', 'first_name', 'last_name',
         'email', 'business_phone', 'mobile_phone', 'rate', 'last_login',
-        'number_of_logins', 'signup_date', 
+        'number_of_logins', 'signup_date',
         'street1', 'street2', 'city', 'state', 'country', 'code'):
             setattr(self, att, None)
 
     @classmethod
     def list(cls, options = {}, get_all=False):
-        '''  
+        '''
         Return a list of this object
         '''
         return super(Staff, cls).list(options, element_name='member', get_all=get_all)
